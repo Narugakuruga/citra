@@ -11,6 +11,8 @@
 
 class EmuWindow;
 
+namespace VideoCore {
+
 class RendererBase : NonCopyable {
 public:
     /// Used to reference a framebuffer
@@ -61,3 +63,4 @@ protected:
 private:
     bool opengl_rasterizer_active = false;
 };
+} // namespace VideoCore

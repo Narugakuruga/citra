@@ -8,6 +8,7 @@
 #include "citra_qt/bootmanager.h"
 #include "common/microprofile.h"
 #include "common/scm_rev.h"
+#include "common/thread.h"
 #include "core/3ds.h"
 #include "core/core.h"
 #include "core/settings.h"
@@ -20,7 +21,11 @@
 EmuThread::EmuThread(GRenderWindow* render_window) : render_window(render_window) {}
 
 void EmuThread::run() {
-    render_window->MakeCurrent();
+    Common::SetCurrentThreadName("EmuThread");
+    if (!Settings::values.use_asynchronous_gpu_emulation) {
+        // Single core mode must acquire OpenGL context for entire emulation session
+        render_window->MakeCurrent();
+    }
 
     MicroProfileOnThreadCreate("EmuThread");
 
@@ -341,12 +346,13 @@ void GRenderWindow::CaptureScreenshot(u16 res_scale, const QString& screenshot_p
         res_scale = VideoCore::GetResolutionScaleFactor();
     const Layout::FramebufferLayout layout{Layout::FrameLayoutFromResolutionScale(res_scale)};
     screenshot_image = QImage(QSize(layout.width, layout.height), QImage::Format_RGB32);
-    VideoCore::RequestScreenshot(screenshot_image.bits(),
-                                 [=] {
-                                     screenshot_image.mirrored(false, true).save(screenshot_path);
-                                     LOG_INFO(Frontend, "The screenshot is saved.");
-                                 },
-                                 layout);
+    VideoCore::RequestScreenshot(
+        screenshot_image.bits(),
+        [=] {
+            screenshot_image.mirrored(false, true).save(screenshot_path);
+            LOG_INFO(Frontend, "The screenshot is saved.");
+        },
+        layout);
 }
 
 void GRenderWindow::OnMinimalClientAreaChangeRequest(

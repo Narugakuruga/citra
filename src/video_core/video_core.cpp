@@ -4,7 +4,10 @@
 
 #include <memory>
 #include "common/logging/log.h"
+#include "common/vector_math.h"
+#include "core/memory.h"
 #include "core/settings.h"
+#include "video_core/gpu_thread.h"
 #include "video_core/pica.h"
 #include "video_core/renderer_base.h"
 #include "video_core/renderer_opengl/renderer_opengl.h"
@@ -16,6 +19,7 @@
 namespace VideoCore {
 
 std::unique_ptr<RendererBase> g_renderer; ///< Renderer plugin
+std::unique_ptr<VideoCommon::GPUThread::ThreadManager> g_gpu_thread;
 
 std::atomic<bool> g_hw_renderer_enabled;
 std::atomic<bool> g_shader_jit_enabled;
@@ -37,6 +41,9 @@ Core::System::ResultStatus Init(EmuWindow& emu_window, Memory::MemorySystem& mem
     Pica::Init();
 
     g_renderer = std::make_unique<OpenGL::RendererOpenGL>(emu_window);
+    if (Settings::values.use_asynchronous_gpu_emulation) {
+        g_gpu_thread = std::make_unique<VideoCommon::GPUThread::ThreadManager>(*g_renderer);
+    }
     Core::System::ResultStatus result = g_renderer->Init();
 
     if (result != Core::System::ResultStatus::Success) {
@@ -53,6 +60,7 @@ void Shutdown() {
     Pica::Shutdown();
 
     g_renderer.reset();
+    g_gpu_thread.reset();
 
     LOG_DEBUG(Render, "shutdown OK");
 }
@@ -80,4 +88,59 @@ u16 GetResolutionScaleFactor() {
     }
 }
 
+void ProcessCommandList(Pica::CommandProcessor::CommandList&& command_list) {
+    if (Settings::values.use_asynchronous_gpu_emulation) {
+        g_gpu_thread->SubmitList(std::move(command_list));
+    } else {
+        Pica::CommandProcessor::ProcessCommandList(std::move(command_list));
+    }
+}
+
+void SwapBuffers() {
+    if (Settings::values.use_asynchronous_gpu_emulation) {
+        g_gpu_thread->SwapBuffers();
+    } else {
+        g_renderer->SwapBuffers();
+    }
+}
+
+void DisplayTransfer(GPU::Regs::DisplayTransferConfig&& config) {
+    if (Settings::values.use_asynchronous_gpu_emulation) {
+        g_gpu_thread->DisplayTransfer(std::move(config));
+    } else {
+        Pica::CommandProcessor::ProcessDisplayTransfer(std::move(config));
+    }
+}
+
+void MemoryFill(GPU::Regs::MemoryFillConfig&& config, bool is_second_filler) {
+    if (Settings::values.use_asynchronous_gpu_emulation) {
+        g_gpu_thread->MemoryFill(std::move(config), is_second_filler);
+    } else {
+        Pica::CommandProcessor::ProcessMemoryFill(std::move(config), is_second_filler);
+    }
+}
+
+void FlushRegion(VAddr addr, u64 size) {
+    if (Settings::values.use_asynchronous_gpu_emulation) {
+        g_gpu_thread->FlushRegion(addr, size);
+    } else {
+        g_renderer->Rasterizer()->FlushRegion(addr, size);
+    }
+}
+
+void InvalidateRegion(VAddr addr, u64 size) {
+    if (Settings::values.use_asynchronous_gpu_emulation) {
+        g_gpu_thread->InvalidateRegion(addr, size);
+    } else {
+        g_renderer->Rasterizer()->InvalidateRegion(addr, size);
+    }
+}
+
+void FlushAndInvalidateRegion(VAddr addr, u64 size) {
+    if (Settings::values.use_asynchronous_gpu_emulation) {
+        g_gpu_thread->FlushAndInvalidateRegion(addr, size);
+    } else {
+        g_renderer->Rasterizer()->FlushAndInvalidateRegion(addr, size);
+    }
+}
 } // namespace VideoCore
