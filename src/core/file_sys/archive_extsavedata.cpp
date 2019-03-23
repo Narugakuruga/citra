@@ -59,7 +59,7 @@ private:
 class ExtSaveDataDelayGenerator : public DelayGenerator {
 public:
     u64 GetReadDelayNs(std::size_t length) override {
-        // This is the delay measured for a savedate read,
+        // This is the delay measured for a savedata read,
         // not for extsaveData
         // For now we will take that
         static constexpr u64 slope(183);
@@ -68,6 +68,14 @@ public:
         u64 ipc_delay_nanoseconds =
             std::max<u64>(static_cast<u64>(length) * slope + offset, minimum);
         return ipc_delay_nanoseconds;
+    }
+
+    u64 GetOpenDelayNs() override {
+        // This is the delay measured on N3DS with
+        // https://gist.github.com/FearlessTobi/929b68489f4abb2c6cf81d56970a20b4
+        // from the results the average of each length was taken.
+        static constexpr u64 IPCDelayNanoseconds(3085068);
+        return IPCDelayNanoseconds;
     }
 };
 
@@ -80,7 +88,11 @@ public:
  */
 class ExtSaveDataArchive : public SaveDataArchive {
 public:
-    explicit ExtSaveDataArchive(const std::string& mount_point) : SaveDataArchive(mount_point) {}
+    explicit ExtSaveDataArchive(const std::string& mount_point,
+                                std::unique_ptr<DelayGenerator> delay_generator_)
+        : SaveDataArchive(mount_point) {
+        delay_generator = std::move(delay_generator_);
+    }
 
     std::string GetName() const override {
         return "ExtSaveDataArchive: " + mount_point;
@@ -220,7 +232,8 @@ Path ArchiveFactory_ExtSaveData::GetCorrectedPath(const Path& path) {
     return {binary_data};
 }
 
-ResultVal<std::unique_ptr<ArchiveBackend>> ArchiveFactory_ExtSaveData::Open(const Path& path) {
+ResultVal<std::unique_ptr<ArchiveBackend>> ArchiveFactory_ExtSaveData::Open(const Path& path,
+                                                                            u64 program_id) {
     std::string fullpath = GetExtSaveDataPath(mount_point, GetCorrectedPath(path)) + "user/";
     if (!FileUtil::Exists(fullpath)) {
         // TODO(Subv): Verify the archive behavior of SharedExtSaveData compared to ExtSaveData.
@@ -231,12 +244,14 @@ ResultVal<std::unique_ptr<ArchiveBackend>> ArchiveFactory_ExtSaveData::Open(cons
             return ERR_NOT_FORMATTED;
         }
     }
-    auto archive = std::make_unique<ExtSaveDataArchive>(fullpath);
+    std::unique_ptr<DelayGenerator> delay_generator = std::make_unique<ExtSaveDataDelayGenerator>();
+    auto archive = std::make_unique<ExtSaveDataArchive>(fullpath, std::move(delay_generator));
     return MakeResult<std::unique_ptr<ArchiveBackend>>(std::move(archive));
 }
 
 ResultCode ArchiveFactory_ExtSaveData::Format(const Path& path,
-                                              const FileSys::ArchiveFormatInfo& format_info) {
+                                              const FileSys::ArchiveFormatInfo& format_info,
+                                              u64 program_id) {
     auto corrected_path = GetCorrectedPath(path);
 
     // These folders are always created with the ExtSaveData
@@ -258,7 +273,8 @@ ResultCode ArchiveFactory_ExtSaveData::Format(const Path& path,
     return RESULT_SUCCESS;
 }
 
-ResultVal<ArchiveFormatInfo> ArchiveFactory_ExtSaveData::GetFormatInfo(const Path& path) const {
+ResultVal<ArchiveFormatInfo> ArchiveFactory_ExtSaveData::GetFormatInfo(const Path& path,
+                                                                       u64 program_id) const {
     std::string metadata_path = GetExtSaveDataPath(mount_point, path) + "metadata";
     FileUtil::IOFile file(metadata_path, "rb");
 

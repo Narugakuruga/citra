@@ -29,6 +29,14 @@ public:
         u64 IPCDelayNanoseconds = std::max<u64>(static_cast<u64>(length) * slope + offset, minimum);
         return IPCDelayNanoseconds;
     }
+
+    u64 GetOpenDelayNs() override {
+        // This is the delay measured on O3DS and O2DS with
+        // https://gist.github.com/FearlessTobi/c37e143c314789251f98f2c45cd706d2
+        // from the results the average of each length was taken.
+        static constexpr u64 IPCDelayNanoseconds(269082);
+        return IPCDelayNanoseconds;
+    }
 };
 
 ResultVal<std::unique_ptr<FileBackend>> SDMCArchive::OpenFile(const Path& path,
@@ -376,18 +384,22 @@ bool ArchiveFactory_SDMC::Initialize() {
     return true;
 }
 
-ResultVal<std::unique_ptr<ArchiveBackend>> ArchiveFactory_SDMC::Open(const Path& path) {
-    auto archive = std::make_unique<SDMCArchive>(sdmc_directory);
+ResultVal<std::unique_ptr<ArchiveBackend>> ArchiveFactory_SDMC::Open(const Path& path,
+                                                                     u64 program_id) {
+    std::unique_ptr<DelayGenerator> delay_generator = std::make_unique<SDMCDelayGenerator>();
+    auto archive = std::make_unique<SDMCArchive>(sdmc_directory, std::move(delay_generator));
     return MakeResult<std::unique_ptr<ArchiveBackend>>(std::move(archive));
 }
 
 ResultCode ArchiveFactory_SDMC::Format(const Path& path,
-                                       const FileSys::ArchiveFormatInfo& format_info) {
+                                       const FileSys::ArchiveFormatInfo& format_info,
+                                       u64 program_id) {
     // This is kind of an undesirable operation, so let's just ignore it. :)
     return RESULT_SUCCESS;
 }
 
-ResultVal<ArchiveFormatInfo> ArchiveFactory_SDMC::GetFormatInfo(const Path& path) const {
+ResultVal<ArchiveFormatInfo> ArchiveFactory_SDMC::GetFormatInfo(const Path& path,
+                                                                u64 program_id) const {
     // TODO(Subv): Implement
     LOG_ERROR(Service_FS, "Unimplemented GetFormatInfo archive {}", GetName());
     return ResultCode(-1);

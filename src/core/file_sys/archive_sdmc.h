@@ -17,7 +17,11 @@ namespace FileSys {
 /// Archive backend for SDMC archive
 class SDMCArchive : public ArchiveBackend {
 public:
-    explicit SDMCArchive(const std::string& mount_point_) : mount_point(mount_point_) {}
+    explicit SDMCArchive(const std::string& mount_point_,
+                         std::unique_ptr<DelayGenerator> delay_generator_)
+        : mount_point(mount_point_) {
+        delay_generator = std::move(delay_generator_);
+    }
 
     std::string GetName() const override {
         return "SDMCArchive: " + mount_point;
@@ -55,9 +59,10 @@ public:
         return "SDMC";
     }
 
-    ResultVal<std::unique_ptr<ArchiveBackend>> Open(const Path& path) override;
-    ResultCode Format(const Path& path, const FileSys::ArchiveFormatInfo& format_info) override;
-    ResultVal<ArchiveFormatInfo> GetFormatInfo(const Path& path) const override;
+    ResultVal<std::unique_ptr<ArchiveBackend>> Open(const Path& path, u64 program_id) override;
+    ResultCode Format(const Path& path, const FileSys::ArchiveFormatInfo& format_info,
+                      u64 program_id) override;
+    ResultVal<ArchiveFormatInfo> GetFormatInfo(const Path& path, u64 program_id) const override;
 
 private:
     std::string sdmc_directory;

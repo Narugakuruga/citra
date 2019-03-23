@@ -19,7 +19,9 @@ namespace FileSys {
  */
 class SDMCWriteOnlyArchive : public SDMCArchive {
 public:
-    explicit SDMCWriteOnlyArchive(const std::string& mount_point) : SDMCArchive(mount_point) {}
+    explicit SDMCWriteOnlyArchive(const std::string& mount_point,
+                                  std::unique_ptr<DelayGenerator> delay_generator_)
+        : SDMCArchive(mount_point, std::move(delay_generator_)) {}
 
     std::string GetName() const override {
         return "SDMCWriteOnlyArchive: " + mount_point;
@@ -46,9 +48,10 @@ public:
         return "SDMCWriteOnly";
     }
 
-    ResultVal<std::unique_ptr<ArchiveBackend>> Open(const Path& path) override;
-    ResultCode Format(const Path& path, const FileSys::ArchiveFormatInfo& format_info) override;
-    ResultVal<ArchiveFormatInfo> GetFormatInfo(const Path& path) const override;
+    ResultVal<std::unique_ptr<ArchiveBackend>> Open(const Path& path, u64 program_id) override;
+    ResultCode Format(const Path& path, const FileSys::ArchiveFormatInfo& format_info,
+                      u64 program_id) override;
+    ResultVal<ArchiveFormatInfo> GetFormatInfo(const Path& path, u64 program_id) const override;
 
 private:
     std::string sdmc_directory;

@@ -22,6 +22,7 @@
 #include "core/hle/service/fs/archive.h"
 #include "core/loader/loader.h"
 #include "country_list.app.romfs.h"
+#include "mii.app.romfs.h"
 #include "shared_font.app.romfs.h"
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -130,9 +131,9 @@ ResultVal<std::unique_ptr<FileBackend>> NCCHArchive::OpenFile(const Path& path,
         std::vector<u8> archive_data;
         if (high == shared_data_archive) {
             if (low == mii_data) {
-                LOG_ERROR(Service_FS, "Failed to get a handle for shared data archive: Mii Data.");
-                Core::System::GetInstance().SetStatus(Core::System::ResultStatus::ErrorSystemFiles,
-                                                      "Mii Data");
+                LOG_WARNING(Service_FS,
+                            "Mii data file missing. Loading open source replacement from memory");
+                archive_data = std::vector<u8>(std::begin(MII_DATA), std::end(MII_DATA));
             } else if (low == region_manifest) {
                 LOG_WARNING(
                     Service_FS,
@@ -269,7 +270,8 @@ bool NCCHFile::SetSize(const u64 size) const {
 
 ArchiveFactory_NCCH::ArchiveFactory_NCCH() {}
 
-ResultVal<std::unique_ptr<ArchiveBackend>> ArchiveFactory_NCCH::Open(const Path& path) {
+ResultVal<std::unique_ptr<ArchiveBackend>> ArchiveFactory_NCCH::Open(const Path& path,
+                                                                     u64 program_id) {
     if (path.GetType() != LowPathType::Binary) {
         LOG_ERROR(Service_FS, "Path need to be Binary");
         return ERROR_INVALID_PATH;
@@ -290,14 +292,16 @@ ResultVal<std::unique_ptr<ArchiveBackend>> ArchiveFactory_NCCH::Open(const Path&
 }
 
 ResultCode ArchiveFactory_NCCH::Format(const Path& path,
-                                       const FileSys::ArchiveFormatInfo& format_info) {
+                                       const FileSys::ArchiveFormatInfo& format_info,
+                                       u64 program_id) {
     LOG_ERROR(Service_FS, "Attempted to format a NCCH archive.");
     // TODO: Verify error code
     return ResultCode(ErrorDescription::NotAuthorized, ErrorModule::FS, ErrorSummary::NotSupported,
                       ErrorLevel::Permanent);
 }
 
-ResultVal<ArchiveFormatInfo> ArchiveFactory_NCCH::GetFormatInfo(const Path& path) const {
+ResultVal<ArchiveFormatInfo> ArchiveFactory_NCCH::GetFormatInfo(const Path& path,
+                                                                u64 program_id) const {
     // TODO(Subv): Implement
     LOG_ERROR(Service_FS, "Unimplemented GetFormatInfo archive {}", GetName());
     return ResultCode(-1);
